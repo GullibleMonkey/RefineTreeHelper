@@ -349,6 +349,8 @@ class UI {
     static btnMacroEndgame := 0
     static btnMacroTimeWarp := 0
     static btnMacroAutoClicker := 0
+    static btnMacroMagnets := 0
+    static btnMacroMineralLevel := 0
     static btnMacroTimeFluxBuy := 0
     static btnMacroAutoUnity := 0
     static btnMacroZodiacRedistribution := 0
@@ -679,7 +681,7 @@ class Validator {
     
     ; Validate macro name
     static ValidateMacro(value) {
-        validMacros := ["standard", "quick", "long", "timewarp", "autoclicker", "endgame", "timefluxbuy", "autounity", "zodiacredistribution"]
+        validMacros := ["standard", "quick", "long", "timewarp", "autoclicker", "magnets", "minerallevel", "endgame", "timefluxbuy", "autounity", "zodiacredistribution"]
         for macroName in validMacros {
             if macroName = value
                 return value
@@ -782,18 +784,19 @@ class Action {
     
     ; Extended spawn for a duration
     static ExtendedSpawn(duration) {
-        if (State.autospawnUnlocked) {
-            ; Auto mode: use autospawn toggle
-            Action.Click("autospawn")
-            Util.Sleep(duration)
-            Action.Click("autospawn")
-        } else {
-            ; Manual mode: click repeatedly
-            startTime := A_TickCount
-            while ((A_TickCount - startTime) < duration && State.isRunning) {
+        startTime := A_TickCount
+        while ((A_TickCount - startTime) < duration && State.isRunning) {
+            if (State.autospawnUnlocked) {
+                ; Auto mode: use autospawn toggle
+                Action.Click("autospawn")
+                Action.LevelUpMineral()
+                Action.Click("autospawn")
+            } else {
+                ; Manual mode: click repeatedly
+                Action.LevelUpMineral()
                 Action.Click("spawn")
-                Util.Sleep(State.microDelayMs)
             }
+            Util.Sleep(State.microDelayMs)
         }
     }
     
@@ -1000,7 +1003,6 @@ class Sequence {
     ; Extended spawn sequence
     static ExtendedSpawn(duration) {
         Action.ExtendedSpawn(duration)
-        Action.LevelUpMineral()
     }
     
     ; Final merge sequence - also affected by game state
@@ -1282,6 +1284,26 @@ class Macro {
                 Click
             }
             ; Small delay between clicks
+            Util.Sleep(State.microDelayMs)
+        }
+    }
+    
+    ; Macro to get magnets as quickly as possible - run with autospawn on while in the prestige menu
+    static Magnets() {
+        while State.isRunning {
+            Action.Click("polishPrestige")
+            Util.Sleep(State.microDelayMs)
+            Action.Click("polishPrestigeConfirm")
+            Util.Sleep(1000)
+        }
+    }
+    
+    ; Macro to continuously update the mineral spawn level while autospawning
+    static MineralLevel() {
+        while State.isRunning {
+            Action.Click("autospawn")
+            Action.LevelUpMineral()
+            Action.Click("autospawn")
             Util.Sleep(State.microDelayMs)
         }
     }
@@ -2179,11 +2201,22 @@ class UIManager {
             
             if State.sectionStates["other.macros"] {
                 ; Autoclicker (first, centered)
-                btnW := Constants.UI_BTN_XLARGE  
-                x := (UI.hudW - btnW) // 2  ; Center without indentation
+                btnW := Constants.UI_BTN_TINY  ; Short text macro buttons
+                totalW := (btnW * 3) + (gap * 2)
+                x := (UI.hudW - totalW) // 2  ; Center without indentation
                 
                 btn := UIManager.CreateStyledButton(x, y, btnW, btnH, "Autoclicker", false)
                 UI.btnMacroAutoClicker := btn
+                UI.sectionContents["other.macros"].Push(btn)
+                
+                x += btnW + gap
+                btn := UIManager.CreateStyledButton(x, y, btnW, btnH, "Magnets", false)
+                UI.btnMacroMagnets := btn
+                UI.sectionContents["other.macros"].Push(btn)
+                
+                x += btnW + gap
+                btn := UIManager.CreateStyledButton(x, y, btnW, btnH, "Mineral Level", false)
+                UI.btnMacroMineralLevel := btn
                 UI.sectionContents["other.macros"].Push(btn)
                 
                 y += btnH + UI.rowGap
@@ -2651,6 +2684,12 @@ class UIManager {
         if UI.btnMacroAutoClicker && IsObject(UI.btnMacroAutoClicker) {
             try UI.btnMacroAutoClicker.OnEvent("Click", (*) => Controller.SelectMacro("autoclicker"))
         }
+        if UI.btnMacroMagnets && IsObject(UI.btnMacroMagnets) {
+            try UI.btnMacroMagnets.OnEvent("Click", (*) => Controller.SelectMacro("magnets"))
+        }
+        if UI.btnMacroMineralLevel && IsObject(UI.btnMacroMineralLevel) {
+            try UI.btnMacroMineralLevel.OnEvent("Click", (*) => Controller.SelectMacro("minerallevel"))
+        }
         if UI.btnMacroTimeFluxBuy && IsObject(UI.btnMacroTimeFluxBuy) {
             try UI.btnMacroTimeFluxBuy.OnEvent("Click", (*) => Controller.SelectMacro("timefluxbuy"))
         }
@@ -2948,6 +2987,10 @@ class UIManager {
             UIManager.UpdateButtonStyle(UI.btnMacroTimeWarp, State.currentMacro = "timewarp")
         if UI.btnMacroAutoClicker && IsObject(UI.btnMacroAutoClicker)
             UIManager.UpdateButtonStyle(UI.btnMacroAutoClicker, State.currentMacro = "autoclicker")
+        if Ui.btnMacroMagnets && IsObject(UI.btnMacroMagnets)
+            UIManager.UpdateButtonStyle(UI.btnMacroMagnets, State.currentMacro = "magnets")
+        if Ui.btnMacroMineralLevel && IsObject(UI.btnMacroMineralLevel)
+            UIManager.UpdateButtonStyle(UI.btnMacroMineralLevel, State.currentMacro = "minerallevel")
         if UI.btnMacroTimeFluxBuy && IsObject(UI.btnMacroTimeFluxBuy)
             UIManager.UpdateButtonStyle(UI.btnMacroTimeFluxBuy, State.currentMacro = "timefluxbuy")
         if UI.btnMacroAutoUnity && IsObject(UI.btnMacroAutoUnity)
@@ -3403,6 +3446,10 @@ class Controller {
                         Macro.TimeWarp()
                     case "autoclicker":
                         Macro.AutoClicker()
+                    case "magnets":
+                        Macro.Magnets()
+                    case "minerallevel":
+                        Macro.MineralLevel()
                     case "timefluxbuy":
                         Macro.TimeFluxBuy()
                     case "autounity":
@@ -3437,7 +3484,7 @@ class Controller {
     
     ; Cycle through macro types
     static CycleMacro() {
-        macros := ["standard", "quick", "long", "timewarp", "autoclicker", "endgame", "timefluxbuy", "autounity", "zodiacredistribution"]
+        macros := ["standard", "quick", "long", "timewarp", "autoclicker", "magnets", "minerallevel", "endgame", "timefluxbuy", "autounity", "zodiacredistribution"]
         currentIndex := 1
         for i, m in macros {
             if m = State.currentMacro {
